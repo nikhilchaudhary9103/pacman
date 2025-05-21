@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man (Working Version)</title>
+    <style>
+        /* CSS Styles */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000; /* Black background */
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive; /* Retro game font */
+            color: white;
+            flex-direction: column;
+            gap: 20px;
+            user-select: none; /* Prevent text selection */
+        }
+
+        /* Import Google Fonts for retro style */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.5); /* Glowing effect */
+            border-radius: 8px; /* Slightly rounded corners */
+            padding: 10px;
+        }
+
+        #score-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 100%; /* Will be adjusted by JS based on maze width */
+            padding: 5px 0;
+            font-size: 1.2em;
+            text-shadow: 0 0 5px yellow;
+        }
+
+        #game-board {
+            display: grid;
+            background-color: black;
+            border: 4px solid #0000FF; /* Blue border for the maze */
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 0, 255, 0.7);
+        }
+
+        .grid-cell {
+            width: var(--cell-size); /* Defined by JS */
+            height: var(--cell-size); /* Defined by JS */
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .wall {
+            background-color: #0000AA; /* Darker blue for walls */
+            border: 1px solid #0000FF;
+            box-shadow: inset 0 0 5px rgba(0, 0, 255, 0.5);
+        }
+
+        .dot {
+            background-color: #FFD700; /* Golden for dots */
+            border-radius: 50%;
+            width: 6px;
+            height: 6px;
+        }
+
+        .power-pellet {
+            background-color: #FFA500; /* Orange for power pellets */
+            border-radius: 50%;
+            width: 12px;
+            height: 12px;
+            animation: pulse 0.8s infinite alternate; /* Pulsing effect for power pellets */
+        }
+
+        @keyframes pulse {
+            from { transform: scale(0.8); opacity: 0.7; }
+            to { transform: scale(1.2); opacity: 1; }
+        }
+
+        #pacman {
+            background-color: yellow;
+            border-radius: 50%;
+            width: var(--pacman-size); /* Defined by JS */
+            height: var(--pacman-size); /* Defined by JS */
+            position: absolute;
+            transform-origin: center center; /* Ensure rotation is from center */
+            animation: chomping 0.15s infinite alternate; /* Faster chomping */
+            z-index: 10;
+        }
+
+        @keyframes chomping {
+            0% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+            50% { border-radius: 50% 50% 0 50% / 50% 50% 0 50%; } /* Mouth open */
+            100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+        }
+
+        .ghost {
+            width: var(--ghost-size); /* Defined by JS */
+            height: var(--ghost-size); /* Defined by JS */
+            border-radius: 50% 50% 0 0; /* Ghost shape */
+            position: absolute;
+            transform-origin: center bottom; /* Ensure rotation is from center-bottom */
+            z-index: 5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Eyes at the top */
+            flex-direction: column;
+            overflow: hidden;
+            border-bottom-left-radius: 50%;
+            border-bottom-right-radius: 50%;
+            box-shadow: 0 0 10px rgba(255,255,255,0.3); /* Subtle glow */
+        }
+
+        .ghost .eyes {
+            width: 60%;
+            height: 40%;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-top: 15%; /* Position eyes more accurately */
+        }
+
+        .ghost .eye {
+            background-color: white;
+            width: 40%;
+            height: 80%;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        .ghost .pupil {
+            background-color: black;
+            width: 50%;
+            height: 50%;
+            border-radius: 50%;
+            position: relative;
+            transition: transform 0.1s ease-out; /* Smooth pupil movement */
+        }
+
+        .ghost.frightened {
+            background-color: #3f51b5; /* Blue for frightened ghost */
+            animation: frightened-blink 0.5s infinite alternate; /* Blink when time is running out */
+        }
+
+        @keyframes frightened-blink {
+            0% { background-color: #3f51b5; } /* Blue */
+            50% { background-color: #FFFFFF; } /* White */
+            100% { background-color: #3f51b5; }
+        }
+
+        .ghost.frightened .eye { background-color: white; }
+        .ghost.frightened .pupil { background-color: blue; }
+
+        .ghost.eaten {
+            background-color: transparent !important; /* Hide body */
+            border-radius: 0;
+            box-shadow: none;
+        }
+        .ghost.eaten .eyes {
+            width: 100%;
+            height: 100%;
+            margin-top: 0;
+        }
+        .ghost.eaten .eye {
+            background-color: white;
+            width: 40%;
+            height: 40%;
+            border-radius: 50%;
+        }
+        .ghost.eaten .pupil {
+            background-color: black;
+            width: 50%;
+            height: 50%;
+        }
+
+
+        /* Ghost Colors */
+        #blinky { background-color: #FF0000; } /* Red */
+        #pinky { background-color: #FFC0CB; } /* Pink */
+        #inky { background-color: #00FFFF; } /* Cyan */
+        #clyde { background-color: #FFA500; } /* Orange */
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85); /* Darker overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 20px;
+            font-size: 2em;
+            text-align: center;
+            z-index: 100;
+            text-shadow: 0 0 10px yellow, 0 0 20px orange;
+        }
+
+        #start-button {
+            background-color: #FFFF00;
+            color: #000000;
+            padding: 18px 35px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.5em;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 5px 15px rgba(255,255,0,0.5);
+            text-transform: uppercase;
+        }
+
+        #start-button:hover {
+            background-color: #FFD700; /* Gold-like */
+            transform: translateY(-2px);
+            box-shadow: 0 7px 20px rgba(255,255,0,0.7);
+        }
+        #start-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(255,255,0,0.5);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="score-panel">
+            <div>SCORE: <span id="score">0</span></div>
+            <div>LIVES: <span id="lives">3</span></div>
+        </div>
+        <div id="game-board">
+            <div id="pacman"></div>
+            <div id="blinky" class="ghost"><div class="eyes"><div class="eye"><div class="pupil"></div></div><div class="eye"><div class="pupil"></div></div></div></div>
+            <div id="pinky" class="ghost"><div class="eyes"><div class="eye"><div class="pupil"></div></div><div class="eye"><div class="pupil"></div></div></div></div>
+            <div id="inky" class="ghost"><div class="eyes"><div class="eye"><div class="pupil"></div></div><div class="eye"><div class="pupil"></div></div></div></div>
+            <div id="clyde" class="ghost"><div class="eyes"><div class="eye"><div class="pupil"></div></div><div class="eye"><div class="pupil"></div></div></div></div>
+        </div>
+        <div id="overlay">
+            <h1>PAC-MAN</h1>
+            <p>Use Arrow Keys to Move</p>
+            <p id="game-message"></p>
+            <button id="start-button">Start Game</button>
+        </div>
+    </div>
+
+    <audio id="beginningSound" src="pacman_beginning.mp3" preload="auto"></audio>
+    <audio id="chompSound" src="pacman_chomp.mp3" preload="auto"></audio>
+    <audio id="deathSound" src="pacman_death.mp3" preload="auto"></audio>
+    <audio id="eatGhostSound" src="pacman_eatghost.mp3" preload="auto"></audio>
+
+    <script>
+        // JavaScript Game Logic
+
+        const gameBoard = document.getElementById('game-board');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const pacmanElement = document.getElementById('pacman');
+        const overlay = document.getElementById('overlay');
+        const gameMessage = document.getElementById('game-message');
+        const startButton = document.getElementById('start-button');
+
+        // Audio elements
+        const beginningSound = document.getElementById('beginningSound');
+        const chompSound = document.getElementById('chompSound');
+        const deathSound = document.getElementById('deathSound');
+        const eatGhostSound = document.getElementById('eatGhostSound');
+
+        // Game Constants
+        const CELL_SIZE = 20; // Pixels per grid cell
+        const PACMAN_SIZE = 18;
+        const GHOST_SIZE = 18;
+        const DOT_SCORE = 10;
+        const POWER_PELLET_SCORE = 50;
+        const GHOST_EAT_SCORE = 200;
+        const FRIGHTENED_TIME = 8000; // 8 seconds
+        const GHOST_SPEED_NORMAL = 180; // Milliseconds per move
+        const GHOST_SPEED_FRIGHTENED = 250; // Slower when scared
+        const GHOST_SPEED_EATEN = 80; // Faster when eaten (returning home)
+        const PACMAN_SPEED = 150; // Milliseconds per move
+
+        // Maze Definition (0=path, 1=wall, 2=dot, 3=power pellet, 4=empty path/ghost home)
+        // This is a simplified version of the actual Pac-Man maze.
+        const initialMaze = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+            [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+            [1,3,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,3,1],
+            [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+            [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+            [1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1],
+            [1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1],
+            [1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1],
+            [1,1,1,1,1,1,2,1,1,1,1,1,4,4,4,4,1,1,1,1,1,2,1,1,1,1,1,1], /* Ghost Home Entry */
+            [1,1,1,1,1,1,2,1,1,4,0,0,0,0,0,0,4,1,1,2,1,1,1,1,1,1,1,1], /* Ghost Home */
+            [1,1,1,1,1,1,2,1,1,4,4,4,4,4,4,4,4,1,1,2,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+            [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+            [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+            [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+            [1,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+        let currentMaze = []; // To store the mutable state of the maze
+
+        let score = 0;
+        let lives = 3;
+        let dotsRemaining = 0;
+        let gameRunning = false;
+        let frightenedTimeout;
+        let ghostRespawnTimeout;
+        let pacmanDeathAnimationTimeout;
+
+        // Cell dimensions for CSS variables
+        document.documentElement.style.setProperty('--cell-size', `${CELL_SIZE}px`);
+        document.documentElement.style.setProperty('--pacman-size', `${PACMAN_SIZE}px`);
+        document.documentElement.style.setProperty('--ghost-size', `${GHOST_SIZE}px`);
+
+        // Pac-Man state
+        let pacman = {
+            x: 1, // Column index
+            y: 16, // Row index (updated to be near bottom power pellet)
+            dx: 0, // direction X
+            dy: 0, // direction Y
+            nextDx: 0, // next desired direction X
+            nextDy: 0, // next desired direction Y
+            currentRotation: 0, // for pacman chomping direction
+            isChomping: false,
+            isDead: false,
+            speed: PACMAN_SPEED // ms per cell move
+        };
+
+        const ghosts = [
+            { id: 'blinky', x: 13, y: 9, startX: 13, startY: 9, color: 'red', dx: 0, dy: 0, scared: false, eaten: false, speed: GHOST_SPEED_NORMAL }, // Start outside ghost home
+            { id: 'pinky', x: 13, y: 10, startX: 13, startY: 10, color: 'pink', dx: 0, dy: 0, scared: false, eaten: false, speed: GHOST_SPEED_NORMAL },
+            { id: 'inky', x: 12, y: 10, startX: 12, startY: 10, color: 'cyan', dx: 0, dy: 0, scared: false, eaten: false, speed: GHOST_SPEED_NORMAL },
+            { id: 'clyde', x: 14, y: 10, startX: 14, startY: 10, color: 'orange', dx: 0, dy: 0, scared: false, eaten: false, speed: GHOST_SPEED_NORMAL }
+        ];
+
+        let pacmanMoveInterval;
+        let ghostMoveIntervals = {};
+
+        function initGame() {
+            score = 0;
+            lives = 3;
+            dotsRemaining = 0;
+            gameRunning = false;
+            scoreDisplay.textContent = score;
+            livesDisplay.textContent = lives;
+
+            // Deep copy the initial maze to currentMaze for modifiable state
+            currentMaze = initialMaze.map(row => [...row]);
+
+            // Clear any previous intervals or timeouts
+            clearInterval(pacmanMoveInterval);
+            for (const ghost of ghosts) {
+                clearInterval(ghostMoveIntervals[ghost.id]);
+            }
+            clearTimeout(frightenedTimeout);
+            clearTimeout(ghostRespawnTimeout);
+            clearTimeout(pacmanDeathAnimationTimeout);
+
+            clearBoard();
+            createGameBoard();
+            resetPacman();
+            resetGhosts();
+            updatePacmanPosition(); // Initial render
+            updateGhostPositions(); // Initial render
+            hideGameElements(); // Keep elements hidden until game starts
+            gameMessage.textContent = "Press START to begin!";
+            overlay.classList.remove('hidden');
+            startButton.textContent = "START GAME";
+            startButton.onclick = startGame; // Set up start button handler
+            document.removeEventListener('keydown', handleKeydown); // Ensure no old handlers
+        }
+
+        function clearBoard() {
+            while (gameBoard.firstChild) {
+                gameBoard.removeChild(gameBoard.firstChild);
+            }
+        }
+
+        function createGameBoard() {
+            gameBoard.style.gridTemplateColumns = `repeat(${currentMaze[0].length}, ${CELL_SIZE}px)`;
+            gameBoard.style.gridTemplateRows = `repeat(${currentMaze.length}, ${CELL_SIZE}px)`;
+            gameBoard.style.width = `${currentMaze[0].length * CELL_SIZE}px`;
+            gameBoard.style.height = `${currentMaze.length * CELL_SIZE}px`;
+
+            // Adjust score panel width
+            document.getElementById('score-panel').style.width = `${currentMaze[0].length * CELL_SIZE}px`;
+
+            dotsRemaining = 0; // Recalculate dots
+
+            for (let y = 0; y < currentMaze.length; y++) {
+                for (let x = 0; x < currentMaze[y].length; x++) {
+                    const div = document.createElement('div');
+                    div.classList.add('grid-cell');
+                    div.dataset.x = x;
+                    div.dataset.y = y;
+
+                    if (currentMaze[y][x] === 1) {
+                        div.classList.add('wall');
+                    } else if (currentMaze[y][x] === 2) {
+                        const dot = document.createElement('div');
+                        dot.classList.add('dot');
+                        div.appendChild(dot);
+                        dotsRemaining++;
+                    } else if (currentMaze[y][x] === 3) {
+                        const powerPellet = document.createElement('div');
+                        powerPellet.classList.add('power-pellet');
+                        div.appendChild(powerPellet);
+                        dotsRemaining++; // Power pellets also count towards dots
+                    }
+                    gameBoard.appendChild(div);
+                }
+            }
+        }
+
+        function getCellElement(x, y) {
+            if (y < 0 || y >= currentMaze.length || x < 0 || x >= currentMaze[0].length) {
+                return null; // Out of bounds
+            }
+            return document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+        }
+
+        function getMazeValue(x, y) {
+            if (y < 0 || y >= currentMaze.length || x < 0 || x >= currentMaze[0].length) {
+                return 1; // Treat out of bounds as wall
+            }
+            return currentMaze[y][x];
+        }
+
+        function setMazeValue(x, y, value) {
+            if (y >= 0 && y < currentMaze.length && x >= 0 && x < currentMaze[0].length) {
+                currentMaze[y][x] = value;
+            }
+        }
+
+        function resetPacman() {
+            pacman.x = 1;
+            pacman.y = 16; // Reset to initial position
+            pacman.dx = 0;
+            pacman.dy = 0;
+            pacman.nextDx = 0;
+            pacman.nextDy = 0;
+            pacman.isChomping = false;
+            pacman.isDead = false;
+            pacmanElement.classList.remove('hidden');
+            pacmanElement.style.transform = `translate(-50%, -50%) rotate(0deg)`; // Reset rotation
+            pacmanElement.style.opacity = 1;
+            pacmanElement.style.animation = 'chomping 0.15s infinite alternate';
+            pacmanElement.style.animationPlayState = 'paused'; // Pause chomping initially
+        }
+
+        function resetGhosts() {
+            ghosts.forEach(ghost => {
+                ghost.x = ghost.startX;
+                ghost.y = ghost.startY;
+                ghost.dx = 0; // Ghosts start stationary in home
+                ghost.dy = 0;
+                ghost.scared = false;
+                ghost.eaten = false;
+                ghost.speed = GHOST_SPEED_NORMAL; // Reset speed
+                const ghostEl = document.getElementById(ghost.id);
+                ghostEl.classList.remove('frightened', 'eaten', 'hidden');
+                ghostEl.style.opacity = 1;
+            });
+            // Blinky starts outside, others inside for real game feel
+            ghosts[0].x = 13; ghosts[0].y = 9; // Blinky
+            ghosts[0].dx = -1; // Blinky moves left initially
+        }
+
+        function hideGameElements() {
+            pacmanElement.classList.add('hidden');
+            ghosts.forEach(ghost => document.getElementById(ghost.id).classList.add('hidden'));
+        }
+
+        function showGameElements() {
+             pacmanElement.classList.remove('hidden');
+            ghosts.forEach(ghost => document.getElementById(ghost.id).classList.remove('hidden'));
+        }
+
+        async function startGame() {
+            if (gameRunning) return; // Prevent multiple starts
+
+            overlay.classList.add('hidden');
